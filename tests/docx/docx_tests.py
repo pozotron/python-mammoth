@@ -23,6 +23,50 @@ class ReadTests(object):
             ])
             assert_equal(expected_document, result.value)
 
+    @istest
+    def bookmark_is_added_when_lastRenderedPageBreak_has_been_read(self):
+        fileobj = _create_zip({
+            "word/page_num.xml": textwrap.dedent("""\
+                    <?xml version="1.0" encoding="utf-8" ?>
+                    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                        <w:body>
+                           <w:p>
+                             <w:r>
+                               <w:t>This file was initially created in Word application. (See the next page)</w:t>
+                             </w:r>
+                           </w:p>
+                           <w:p>
+                             <w:r>
+                               <w:lastRenderedPageBreak/>
+                               <w:t>And it’s got two pages!</w:t>
+                             </w:r>
+                           </w:p>
+                         </w:body>
+                    </w:document>
+                """),
+        "_rels/.rels": textwrap.dedent("""\
+            <?xml version="1.0" encoding="utf-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                <Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="/word/page_num.xml" Id="rId1"/>
+            </Relationships>
+        """),
+        })
+        result = docx.read(fileobj=fileobj)
+        expected_document = documents.document([
+            documents.paragraph([
+                documents.run([
+                    documents.text("This file was initially created in Word application. (See the next page)")
+                ])
+            ]),
+            documents.paragraph([
+                documents.run([
+                    documents.bookmark("lastRenderedPageBreak"),
+                    documents.text("And it’s got two pages!")
+                ])
+            ])
+        ])
+        assert_equal(expected_document, result.value)
+
 
 _relationship_namespaces = {
     "r": "http://schemas.openxmlformats.org/package/2006/relationships",
@@ -77,6 +121,7 @@ def error_is_raised_when_main_document_part_does_not_exist():
         "Could not find main document part. Are you sure this is a valid .docx file?",
         str(error),
     )
+
 
 class TestPartPaths(object):
     @istest
