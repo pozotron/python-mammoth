@@ -56,7 +56,6 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         "w:bookmarkEnd",
         "w:sectPr",
         "w:proofErr",
-        "w:lastRenderedPageBreak",
         "w:commentRangeStart",
         "w:commentRangeEnd",
         "w:del",
@@ -468,6 +467,9 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
     def alternate_content(element):
         return read_child_elements(element.find_child("mc:Fallback"))
 
+    def lastRenderedPageBreak(element):
+        return _success(documents.bookmark("lastRenderedPageBreak"))
+
     def read_sdt(element):
         return read_child_elements(element.find_child_or_null("w:sdtContent"))
 
@@ -504,6 +506,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         "w:endnoteReference": note_reference_reader("endnote"),
         "w:commentReference": read_comment_reference,
         "mc:AlternateContent": alternate_content,
+        "w:lastRenderedPageBreak": lastRenderedPageBreak,
         "w:sdt": read_sdt
     }
 
