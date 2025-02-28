@@ -6,7 +6,8 @@ from .. import documents
 from .. import results
 from .. import lists
 from . import complex_fields
-from .xmlparser import node_types, XmlElement
+from .dingbats import dingbats
+from .xmlparser import node_types, XmlElement, null_xml_element
 from .styles_xml import Styles
 from .uris import replace_fragment, uri_to_zip_entry_name
 
@@ -48,6 +49,14 @@ class _BodyReader(object):
 
 
 def _create_reader(numbering, content_types, relationships, styles, docx_file, files):
+    current_instr_text = []
+    complex_field_stack = []
+
+    # When a paragraph is marked as deleted, its contents should be combined
+    # with the following paragraph. See 17.13.5.15 del (Deleted Paragraph) of
+    # ECMA-376 4th edition Part 1.
+    deleted_paragraph_contents = []
+
     _ignored_elements = set([
         "office-word:wrap",
         "v:shadow",
@@ -88,16 +97,18 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
 
         is_bold = read_boolean_element(properties.find_child("w:b"))
         is_italic = read_boolean_element(properties.find_child("w:i"))
-        is_underline = read_boolean_element(properties.find_child("w:u"))
+        is_underline = read_underline_element(properties.find_child("w:u"))
         is_strikethrough = read_boolean_element(properties.find_child("w:strike"))
+        is_all_caps = read_boolean_element(properties.find_child("w:caps"))
         is_small_caps = read_boolean_element(properties.find_child("w:smallCaps"))
+        highlight = read_highlight_value(properties.find_child_or_null("w:highlight").attributes.get("w:val"))
 
         def add_complex_field_hyperlink(children):
-            hyperlink_href = current_hyperlink_href()
-            if hyperlink_href is None:
+            hyperlink_kwargs = current_hyperlink_kwargs()
+            if hyperlink_kwargs is None:
                 return children
             else:
-                return [documents.hyperlink(href=hyperlink_href, children=children)]
+                return [documents.hyperlink(children=children, **hyperlink_kwargs)]
 
         return _ReadResult.map_results(
             _read_run_style(properties),
@@ -110,74 +121,134 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
                 is_italic=is_italic,
                 is_underline=is_underline,
                 is_strikethrough=is_strikethrough,
+                is_all_caps=is_all_caps,
                 is_small_caps=is_small_caps,
                 vertical_alignment=vertical_alignment,
                 font=font,
                 font_size=font_size,
+                highlight=highlight,
             ))
 
     def _read_run_style(properties):
         return _read_style(properties, "w:rStyle", "Run", styles.find_character_style_by_id)
 
     def read_boolean_element(element):
-        return element and element.attributes.get("w:val") not in ["false", "0"]
+        if element is None:
+            return False
+        else:
+            return read_boolean_attribute_value(element.attributes.get("w:val"))
 
+    def read_boolean_attribute_value(value):
+        return value not in ["false", "0"]
+
+    def read_underline_element(element):
+        return element and element.attributes.get("w:val") not in [None, "false", "0", "none"]
+
+    def read_highlight_value(value):
+        if not value or value == "none":
+            return None
+        else:
+            return value
 
     def paragraph(element):
         properties = element.find_child_or_null("w:pPr")
-        alignment = properties.find_child_or_null("w:jc").attributes.get("w:val")
-        numbering = _read_numbering_properties(properties.find_child_or_null("w:numPr"))
-        indent = _read_paragraph_indent(properties.find_child_or_null("w:ind"))
 
-        return _ReadResult.map_results(
-            _read_paragraph_style(properties),
-            _read_xml_elements(element.children),
-            lambda style, children: documents.paragraph(
-                children=children,
-                style_id=style[0],
-                style_name=style[1],
-                numbering=numbering,
-                alignment=alignment,
-                indent=indent,
-            )).append_extra()
+        is_deleted = properties.find_child_or_null("w:rPr").find_child("w:del")
+
+        if is_deleted is not None:
+            for child in element.children:
+                deleted_paragraph_contents.append(child)
+            return _empty_result
+
+        else:
+            alignment = properties.find_child_or_null("w:jc").attributes.get("w:val")
+            indent = _read_paragraph_indent(properties.find_child_or_null("w:ind"))
+
+            children_xml = element.children
+            if deleted_paragraph_contents:
+                children_xml = deleted_paragraph_contents + children_xml
+                del deleted_paragraph_contents[:]
+
+            return _ReadResult.map_results(
+                _read_paragraph_style(properties),
+                _read_xml_elements(children_xml),
+                lambda style, children: documents.paragraph(
+                    children=children,
+                    style_id=style[0],
+                    style_name=style[1],
+                    numbering=_read_numbering_properties(
+                        paragraph_style_id=style[0],
+                        element=properties.find_child_or_null("w:numPr"),
+                    ),
+                    alignment=alignment,
+                    indent=indent,
+                )).append_extra()
 
     def _read_paragraph_style(properties):
         return _read_style(properties, "w:pStyle", "Paragraph", styles.find_paragraph_style_by_id)
 
-    current_instr_text = []
-    complex_field_stack = []
-
-    def current_hyperlink_href():
+    def current_hyperlink_kwargs():
         for complex_field in reversed(complex_field_stack):
             if isinstance(complex_field, complex_fields.Hyperlink):
-                return complex_field.href
+                return complex_field.kwargs
 
         return None
 
     def read_fld_char(element):
         fld_char_type = element.attributes.get("w:fldCharType")
         if fld_char_type == "begin":
-            complex_field_stack.append(complex_fields.unknown)
+            complex_field_stack.append(complex_fields.begin(fld_char=element))
             del current_instr_text[:]
+
         elif fld_char_type == "end":
-            complex_field_stack.pop()
+            complex_field = complex_field_stack.pop()
+            if isinstance(complex_field, complex_fields.Begin):
+                complex_field = parse_current_instr_text(complex_field)
+
+            if isinstance(complex_field, complex_fields.Checkbox):
+                return _success(documents.checkbox(checked=complex_field.checked))
+
         elif fld_char_type == "separate":
-            instr_text = "".join(current_instr_text)
-            hyperlink_href = parse_hyperlink_field_code(instr_text)
-            if hyperlink_href is None:
-                complex_field = complex_fields.unknown
-            else:
-                complex_field = complex_fields.hyperlink(hyperlink_href)
-            complex_field_stack.pop()
+            complex_field_separate = complex_field_stack.pop()
+            complex_field = parse_current_instr_text(complex_field_separate)
             complex_field_stack.append(complex_field)
+
         return _empty_result
 
-    def parse_hyperlink_field_code(instr_text):
-        result = re.match(r'\s*HYPERLINK "(.*)"', instr_text)
-        if result is None:
-            return None
+    def parse_current_instr_text(complex_field):
+        instr_text = "".join(current_instr_text)
+
+        if isinstance(complex_field, complex_fields.Begin):
+            fld_char = complex_field.fld_char
         else:
-            return result.group(1)
+            fld_char = null_xml_element
+
+        return parse_instr_text(instr_text, fld_char=fld_char)
+
+    def parse_instr_text(instr_text, *, fld_char):
+        external_link_result = re.match(r'\s*HYPERLINK "(.*)"', instr_text)
+        if external_link_result is not None:
+            return complex_fields.hyperlink(dict(href=external_link_result.group(1)))
+
+        internal_link_result = re.match(r'\s*HYPERLINK\s+\\l\s+"(.*)"', instr_text)
+        if internal_link_result is not None:
+            return complex_fields.hyperlink(dict(anchor=internal_link_result.group(1)))
+
+        checkbox_result = re.match(r'\s*FORMCHECKBOX\s*', instr_text)
+        if checkbox_result is not None:
+            checkbox_element = fld_char \
+                .find_child_or_null("w:ffData") \
+                .find_child_or_null("w:checkBox")
+            checked_element = checkbox_element.find_child("w:checked")
+
+            if checked_element is None:
+                checked = read_boolean_element(checkbox_element.find_child("w:default"))
+            else:
+                checked = read_boolean_element(checked_element)
+
+            return complex_fields.checkbox(checked=checked)
+
+        return None
 
     def read_instr_text(element):
         current_instr_text.append(_inner_text(element))
@@ -204,13 +275,18 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
     def _undefined_style_warning(style_type, style_id):
         return results.warning("{0} style with ID {1} was referenced but not defined in the document".format(style_type, style_id))
 
-    def _read_numbering_properties(element):
+    def _read_numbering_properties(paragraph_style_id, element):
         num_id = element.find_child_or_null("w:numId").attributes.get("w:val")
         level_index = element.find_child_or_null("w:ilvl").attributes.get("w:val")
-        if num_id is None or level_index is None:
-            return None
-        else:
+        if num_id is not None and level_index is not None:
             return numbering.find_level(num_id, level_index)
+
+        if paragraph_style_id is not None:
+            level = numbering.find_level_by_paragraph_style_id(paragraph_style_id)
+            if level is not None:
+                return level
+
+        return None
 
     def _read_paragraph_indent(element):
         attributes = element.attributes
@@ -231,6 +307,25 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
 
     def soft_hyphen(element):
         return _success(documents.text(u"\u00ad"))
+
+    def symbol(element):
+        # See 17.3.3.30 sym (Symbol Character) of ECMA-376 4th edition Part 1
+        font = element.attributes.get("w:font")
+        char = element.attributes.get("w:char")
+
+        unicode_code_point = dingbats.get((font, int(char, 16)))
+
+        if unicode_code_point is None and re.match("^F0..", char):
+            unicode_code_point = dingbats.get((font, int(char[2:], 16)))
+
+        if unicode_code_point is None:
+            warning = results.warning("A w:sym element with an unsupported character was ignored: char {0} in font {1}".format(
+                char,
+                font,
+            ))
+            return _empty_result_with_message(warning)
+        else:
+            return _success(documents.text(unichr(unicode_code_point)))
 
 
     def table(element):
@@ -402,10 +497,16 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         return _ReadResult.concat(lists.map(lambda blip: _read_blip(blip, alt_text), blips))
 
     def _read_blip(element, alt_text):
-        return _read_image(lambda: _find_blip_image(element), alt_text)
+        blip_image = _find_blip_image(element)
 
-    def _read_image(find_image, alt_text):
-        image_path, open_image = find_image()
+        if blip_image is None:
+            warning = results.warning("Could not find image file for a:blip element")
+            return _empty_result_with_message(warning)
+        else:
+            return _read_image(blip_image, alt_text)
+
+    def _read_image(image_file, alt_text):
+        image_path, open_image = image_file
         content_type = content_types.find_content_type(image_path)
         image = documents.image(alt_text=alt_text, content_type=content_type, open=open_image)
 
@@ -423,6 +524,8 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             return _find_embedded_image(embed_relationship_id)
         elif link_relationship_id is not None:
             return _find_linked_image(link_relationship_id)
+        else:
+            return None
 
     def _find_embedded_image(relationship_id):
         target = relationships.find_target_by_relationship_id(relationship_id)
@@ -453,7 +556,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
             return _empty_result_with_message(warning)
         else:
             title = element.attributes.get("o:title")
-            return _read_image(lambda: _find_embedded_image(relationship_id), title)
+            return _read_image(_find_embedded_image(relationship_id), title)
 
     def note_reference_reader(note_type):
         def note_reference(element):
@@ -471,7 +574,17 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         return _success(documents.bookmark("lastRenderedPageBreak"))
 
     def read_sdt(element):
-        return read_child_elements(element.find_child_or_null("w:sdtContent"))
+        checkbox = element.find_child_or_null("w:sdtPr").find_child("wordml:checkbox")
+
+        if checkbox is not None:
+            checked_element = checkbox.find_child("wordml:checked")
+            is_checked = (
+                checked_element is not None and
+                read_boolean_attribute_value(checked_element.attributes.get("wordml:val"))
+            )
+            return _success(documents.checkbox(checked=is_checked))
+        else:
+            return read_child_elements(element.find_child_or_null("w:sdtContent"))
 
     handlers = {
         "w:t": text,
@@ -482,6 +595,7 @@ def _create_reader(numbering, content_types, relationships, styles, docx_file, f
         "w:tab": tab,
         "w:noBreakHyphen": no_break_hyphen,
         "w:softHyphen": soft_hyphen,
+        "w:sym": symbol,
         "w:tbl": table,
         "w:tr": table_row,
         "w:tc": table_cell,

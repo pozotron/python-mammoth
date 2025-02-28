@@ -109,8 +109,14 @@ class _DocumentConverter(documents.element_visitor(args=1)):
     def visit_run(self, run, context):
         nodes = lambda: self._visit_all(run.children, context)
         paths = []
+        if run.highlight is not None:
+            style = self._find_style(Highlight(color=run.highlight), "highlight")
+            if style is not None:
+                paths.append(style.html_path)
         if run.is_small_caps:
             paths.append(self._find_style_for_run_property("small_caps"))
+        if run.is_all_caps:
+            paths.append(self._find_style_for_run_property("all_caps"))
         if run.is_strikethrough:
             paths.append(self._find_style_for_run_property("strikethrough", default="s"))
         if run.is_underline:
@@ -157,6 +163,15 @@ class _DocumentConverter(documents.element_visitor(args=1)):
 
         nodes = self._visit_all(hyperlink.children, context)
         return [html.collapsible_element("a", attributes, nodes)]
+
+
+    def visit_checkbox(self, checkbox, context):
+        attributes = {"type": "checkbox"}
+
+        if checkbox.checked:
+            attributes["checked"] = "checked"
+
+        return [html.element("input", attributes)]
 
 
     def visit_bookmark(self, bookmark, context):
@@ -352,9 +367,19 @@ class _DocumentConverter(documents.element_visitor(args=1)):
         return "{0}{1}".format(self._id_prefix, suffix)
 
 
+@cobble.data
+class Highlight:
+    color = cobble.field()
+
+
 def _document_matcher_matches(matcher, element, element_type):
-    if matcher.element_type in ["underline", "strikethrough", "small_caps", "bold", "italic", "comment_reference"]:
+    if matcher.element_type in ["underline", "strikethrough", "all_caps", "small_caps", "bold", "italic", "comment_reference"]:
         return matcher.element_type == element_type
+    elif matcher.element_type == "highlight":
+        return (
+            matcher.element_type == element_type and
+            (matcher.color is None or matcher.color == element.color)
+        )
     elif matcher.element_type == "break":
         return (
             matcher.element_type == element_type and
