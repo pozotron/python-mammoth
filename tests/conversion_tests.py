@@ -632,8 +632,7 @@ def test_when_initials_are_blank_then_comment_author_label_is_blank():
     )))
 
 
-@istest
-def span_bloc_with_pagenum_info_interpreting_as_tag():
+def test_span_bloc_with_pagenum_info_interpreting_as_tag():
     result = convert_document_element_to_html(
         documents.run(children=[documents.text('<span data-page="1">Some info</span>')]))
     assert_equal('<span data-page="1">Some info</span>', result.value)
