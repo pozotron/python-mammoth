@@ -48,10 +48,12 @@ class Run(HasChildren):
     is_italic = cobble.field()
     is_underline = cobble.field()
     is_strikethrough = cobble.field()
+    is_all_caps = cobble.field()
     is_small_caps = cobble.field()
     vertical_alignment = cobble.field()
     font = cobble.field()
     font_size = cobble.field()
+    highlight = cobble.field()
 
 @cobble.data
 class Text(Element):
@@ -62,6 +64,12 @@ class Hyperlink(HasChildren):
     href = cobble.field()
     anchor = cobble.field()
     target_frame = cobble.field()
+
+@cobble.data
+class Checkbox(Element):
+    checked = cobble.field()
+
+checkbox = Checkbox
 
 @cobble.data
 class Table(HasChildren):
@@ -122,10 +130,12 @@ def run(
     is_italic=None,
     is_underline=None,
     is_strikethrough=None,
+    is_all_caps=None,
     is_small_caps=None,
     vertical_alignment=None,
     font=None,
     font_size=None,
+    highlight=None,
 ):
     if vertical_alignment is None:
         vertical_alignment = VerticalAlignment.baseline
@@ -137,10 +147,12 @@ def run(
         is_italic=bool(is_italic),
         is_underline=bool(is_underline),
         is_strikethrough=bool(is_strikethrough),
+        is_all_caps=bool(is_all_caps),
         is_small_caps=bool(is_small_caps),
         vertical_alignment=vertical_alignment,
         font=font,
         font_size=font_size,
+        highlight=highlight,
     )
 
 class VerticalAlignment(object):

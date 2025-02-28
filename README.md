@@ -1,7 +1,7 @@
 # Mammoth .docx to HTML converter
 
 Mammoth is designed to convert .docx documents,
-such as those created by Microsoft Word,
+such as those created by Microsoft Word, Google Docs and LibreOffice,
 and convert them to HTML.
 Mammoth aims to produce simple and clean HTML by using semantic information in the document,
 and ignoring other details.
@@ -306,6 +306,10 @@ Converts the source document to HTML.
 
 #### `mammoth.convert_to_markdown(fileobj, **kwargs)`
 
+Markdown support is deprecated.
+Generating HTML and using a separate library to convert the HTML to Markdown is recommended,
+and is likely to produce better results.
+
 Converts the source document to Markdown.
 This behaves the same as `convert_to_html`,
 except that the `value` property of the result contains Markdown rather than HTML.
@@ -419,7 +423,7 @@ Or if you want paragraphs that have been explicitly set to use monospace fonts t
 import mammoth.documents
 import mammoth.transforms
 
-_monospace_fonts = set(["courier new"])
+_monospace_fonts = set(["consolas", "courier", "courier new"])
 
 def transform_paragraph(paragraph):
     runs = mammoth.transforms.get_descendants_of_type(paragraph, mammoth.documents.Run)
@@ -596,6 +600,17 @@ strike
 Note that this matches text that has had strikethrough explicitly applied to it.
 It will not match any text that is struckthrough because of its paragraph or run style.
 
+#### All caps
+
+Match explicitly all caps text:
+
+```
+all-caps
+```
+
+Note that this matches text that has had all caps explicitly applied to it.
+It will not match any text that is all caps because of its paragraph or run style.
+
 #### Small caps
 
 Match explicitly small caps text:
@@ -606,6 +621,52 @@ small-caps
 
 Note that this matches text that has had small caps explicitly applied to it.
 It will not match any text that is small caps because of its paragraph or run style.
+
+#### Highlight
+
+Match explicitly highlighted text:
+
+```
+highlight
+```
+
+Note that this matches text that has had a highlight explicitly applied to it.
+It will not match any text that is highlighted because of its paragraph or run style.
+
+It's also possible to match specific colours.
+For instance, to match yellow highlights:
+
+```
+highlight[color='yellow']
+```
+
+The set of colours typically used are:
+
+* `black`
+* `blue`
+* `cyan`
+* `green`
+* `magenta`
+* `red`
+* `yellow`
+* `white`
+* `darkBlue`
+* `darkCyan`
+* `darkGreen`
+* `darkMagenta`
+* `darkRed`
+* `darkYellow`
+* `darkGray`
+* `lightGray`
+
+#### Ignoring document elements
+
+Use `!` to ignore a document element.
+For instance, to ignore any paragraph with the style `Comment`:
+
+```
+p[style-name='Comment'] => !
+```
 
 ### HTML paths
 
@@ -623,6 +684,12 @@ append a dot followed by the name of the class:
 
 ```
 h1.section-title
+```
+
+To add an attribute, use square brackets similarly to a CSS attribute selector:
+
+```
+p[lang='fr']
 ```
 
 To require that an element is fresh, use `:fresh`:
@@ -669,11 +736,9 @@ div.aside > h2
 
 You can nest elements to any depth.
 
-#### Ignoring document elements
+## Donations
 
-Use `!` to ignore a document element.
-For instance, to ignore any paragraph with the style `Comment`:
+If you'd like to say thanks, feel free to [make a donation through Ko-fi](https://ko-fi.com/S6S01MG20).
 
-```
-p[style-name='Comment'] => !
-```
+If you use Mammoth as part of your business,
+please consider supporting the ongoing maintenance of Mammoth by [making a weekly donation through Liberapay](https://liberapay.com/mwilliamson/donate).

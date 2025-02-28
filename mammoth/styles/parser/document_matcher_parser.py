@@ -9,17 +9,17 @@ def parse_document_matcher(tokens):
         style_id = try_parse_class_name(tokens)
         style_name = _parse_style_name(tokens)
         numbering = _parse_numbering(tokens)
-        
+
         return document_matchers.paragraph(
             style_id=style_id,
             style_name=style_name,
             numbering=numbering,
         )
-        
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "r"):
         style_id = try_parse_class_name(tokens)
         style_name = _parse_style_name(tokens)
-        
+
         return document_matchers.run(
             style_id=style_id,
             style_name=style_name,
@@ -36,19 +36,25 @@ def parse_document_matcher(tokens):
 
     elif tokens.try_skip(TokenType.IDENTIFIER, "b"):
         return document_matchers.bold
-    
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "i"):
         return document_matchers.italic
-    
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "u"):
         return document_matchers.underline
-    
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "strike"):
         return document_matchers.strikethrough
-    
+
+    elif tokens.try_skip(TokenType.IDENTIFIER, "all-caps"):
+        return document_matchers.all_caps
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "small-caps"):
         return document_matchers.small_caps
-    
+
+    elif tokens.try_skip(TokenType.IDENTIFIER, "highlight"):
+        return _parse_highlight(tokens)
+
     elif tokens.try_skip(TokenType.IDENTIFIER, "comment-reference"):
         return document_matchers.comment_reference
 
@@ -95,13 +101,25 @@ def _parse_list_type(tokens):
         raise LineParseError("Unrecognised list type: {0}".format(list_type))
 
 
+def _parse_highlight(tokens):
+    if tokens.try_skip(TokenType.SYMBOL, "["):
+        tokens.skip(TokenType.IDENTIFIER, "color")
+        tokens.skip(TokenType.SYMBOL, "=")
+        color = parse_string(tokens)
+        tokens.skip(TokenType.SYMBOL, "]");
+    else:
+        color = None
+
+    return document_matchers.highlight(color=color)
+
+
 def _parse_break(tokens):
     tokens.skip(TokenType.SYMBOL, "[")
     tokens.skip(TokenType.IDENTIFIER, "type")
     tokens.skip(TokenType.SYMBOL, "=")
     type_name = parse_string(tokens)
     tokens.skip(TokenType.SYMBOL, "]");
-    
+
     if type_name == "line":
         return document_matchers.line_break
     elif type_name == "page":

@@ -43,9 +43,20 @@ class strikethrough(object):
     element_type = "strikethrough"
 
 
+class all_caps(object):
+    element_type = "all_caps"
+
+
 class small_caps(object):
     element_type = "small_caps"
 
+
+def highlight(color=None):
+    return HighlightMatcher(color=color)
+
+
+HighlightMatcher = collections.namedtuple("HighlightMatcher", ["color"])
+HighlightMatcher.element_type = "highlight"
 
 class comment_reference(object):
     element_type = "comment_reference"
@@ -66,8 +77,8 @@ def equal_to(value):
 
 def _operator_equal_to(first, second):
     return first.upper() == second.upper()
-    
-    
+
+
 def starts_with(value):
     return StringMatcher(_operator_starts_with, value)
 
@@ -79,6 +90,6 @@ def _operator_starts_with(first, second):
 class StringMatcher(object):
     operator = cobble.field()
     value = cobble.field()
-    
+
     def matches(self, other):
         return self.operator(self.value, other)
