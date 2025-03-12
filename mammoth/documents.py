@@ -185,7 +185,8 @@ def table_cell(children, colspan=None, rowspan=None):
 
 def numbering_level(level_index, is_ordered,
                     abstract_num_id=0, start_index=1, is_decimal=False):
-    return _NumberingLevel(str(level_index), bool(is_ordered), str(abstract_num_id), str(start_index), bool(is_decimal))
+    return _NumberingLevel(str(level_index), bool(is_ordered),
+                           str(abstract_num_id), str(start_index), bool(is_decimal))
 
 
 @cobble.data

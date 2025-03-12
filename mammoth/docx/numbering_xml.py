@@ -44,7 +44,7 @@ def _read_abstract_num_levels(element):
 
 def _read_abstract_num_level(element, abstract_num_id):
     level_index = element.attributes["w:ilvl"]
-    start_index = element.find_child_or_null("w:start").attributes.get("w:val")
+    start_index = element.find_child_or_null("w:start").attributes.get("w:val", "0")
     num_fmt = element.find_child_or_null("w:numFmt").attributes.get("w:val")
     is_ordered = num_fmt != "bullet"
     is_decimal = num_fmt == "decimal"
