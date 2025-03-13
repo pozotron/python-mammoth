@@ -1,4 +1,5 @@
 import cobble
+from functools import partial
 
 from ..documents import numbering_level
 from .styles_xml import Styles
@@ -29,18 +30,26 @@ class _AbstractNum(object):
 
 
 def _read_abstract_num_levels(element):
-    levels = map(_read_abstract_num_level, element.find_children("w:lvl"))
+    abstract_num_id = element.attributes.get("w:abstractNumId")
+
+    levels = map(
+        partial(_read_abstract_num_level, abstract_num_id=abstract_num_id),
+        element.find_children("w:lvl")
+    )
     return dict(
         (level.level_index, level)
         for level in levels
     )
 
 
-def _read_abstract_num_level(element):
+def _read_abstract_num_level(element, abstract_num_id):
     level_index = element.attributes["w:ilvl"]
+    start_index = element.find_child_or_null("w:start").attributes.get("w:val", "0")
     num_fmt = element.find_child_or_null("w:numFmt").attributes.get("w:val")
     is_ordered = num_fmt != "bullet"
-    return numbering_level(level_index, is_ordered)
+    is_decimal = num_fmt == "decimal"
+    return numbering_level(level_index, is_ordered,
+                           is_decimal=is_decimal, start_index=start_index, abstract_num_id=abstract_num_id)
 
 
 def _read_nums(element):

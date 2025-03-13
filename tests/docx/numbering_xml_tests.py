@@ -18,6 +18,9 @@ _sample_numbering_xml = xml_element("w:numbering", {}, [
         ]),
         xml_element("w:lvl", {"w:ilvl": "1"}, [
             xml_element("w:numFmt", {"w:val": "decimal"})
+        ]),
+        xml_element("w:lvl", {"w:ilvl": "2"}, [
+            xml_element("w:numFmt", {"w:val": "upperLetter"})
         ])
     ]),
     xml_element("w:num", {"w:numId": "47"}, [
@@ -31,23 +34,33 @@ def level_includes_level_index():
     numbering = _read_numbering_xml_element(_sample_numbering_xml)
     assert_equal("0", numbering.find_level("47", "0").level_index)
     assert_equal("1", numbering.find_level("47", "1").level_index)
+    assert_equal("2", numbering.find_level("47", "2").level_index)
 
 
 @istest
 def list_is_not_ordered_if_formatted_as_bullet():
     numbering = _read_numbering_xml_element(_sample_numbering_xml)
     assert_equal(False, numbering.find_level("47", "0").is_ordered)
+    assert_equal(False, numbering.find_level("47", "0").is_decimal)
 
 @istest
 def list_is_ordered_if_formatted_as_decimal():
     numbering = _read_numbering_xml_element(_sample_numbering_xml)
     assert_equal(True, numbering.find_level("47", "1").is_ordered)
+    assert_equal(True, numbering.find_level("47", "1").is_decimal)
+
+
+@istest
+def list_is_ordered_if_formatted_as_upper_letter():
+    numbering = _read_numbering_xml_element(_sample_numbering_xml)
+    assert_equal(True, numbering.find_level("47", "2").is_ordered)
+    assert_equal(False, numbering.find_level("47", "2").is_decimal)
 
 
 @istest
 def find_level_returns_none_if_level_cannot_be_found():
     numbering = _read_numbering_xml_element(_sample_numbering_xml)
-    assert_equal(None, numbering.find_level("47", "2"))
+    assert_equal(None, numbering.find_level("47", "3"))
 
 
 @istest
@@ -72,6 +85,8 @@ def when_abstract_num_has_num_style_link_then_style_is_used_to_find_num():
         styles=Styles.create(numbering_styles={"List1": NumberingStyle(num_id="200")}),
     )
     assert_equal(True, numbering.find_level("201", "0").is_ordered)
+    assert_equal(True, numbering.find_level("201", "0").is_decimal)
+
 
 
 def _read_numbering_xml_element(element, styles=None):

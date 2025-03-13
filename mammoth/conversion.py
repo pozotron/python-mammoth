@@ -370,8 +370,13 @@ def _document_matcher_matches(matcher, element, element_type):
                 element.style_name is not None and (matcher.style_name.matches(element.style_name))
             ) and (
                 element_type != "paragraph" or
-                matcher.numbering is None or
-                matcher.numbering == element.numbering
+                matcher.numbering is None or (
+                    # A bit more complicated _Numbering comparison
+                    # as cobble.data() doesn't allow overloading __eq__ operator
+                    element.numbering and
+                    matcher.numbering.level_index == element.numbering.level_index and
+                    matcher.numbering.is_ordered == element.numbering.is_ordered
+                )
             )
         )
 

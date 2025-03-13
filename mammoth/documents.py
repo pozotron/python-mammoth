@@ -183,13 +183,21 @@ def table_cell(children, colspan=None, rowspan=None):
     return TableCell(children=children, colspan=colspan, rowspan=rowspan)
 
 
-def numbering_level(level_index, is_ordered):
-    return _NumberingLevel(str(level_index), bool(is_ordered))
+def numbering_level(level_index, is_ordered,
+                    abstract_num_id=0, start_index=1, is_decimal=False):
+    return _NumberingLevel(str(level_index), bool(is_ordered),
+                           str(abstract_num_id), str(start_index), bool(is_decimal))
+
 
 @cobble.data
 class _NumberingLevel(object):
     level_index = cobble.field()
     is_ordered = cobble.field()
+
+    abstract_num_id = cobble.field()
+    start_index = cobble.field()
+    is_decimal = cobble.field()
+
 
 @cobble.data
 class Note(Element):
